@@ -47,6 +47,9 @@
   .review { background: var(--accent); color: #fff; }
   .blog { background: var(--chip); color: var(--ink); border: 1px solid var(--line); }
   .links + .links { margin-top: 8px; }
+  .typeWin { display: inline-block; margin-bottom: 10px; padding: 6px 14px; border-radius: 999px;
+    background: var(--accent-2); color: #2b2118; font-weight: 800; font-size: 16px; }
+  .typeWin.hidden { display: none; }
   #map { width: 100%; height: 220px; border-radius: 14px; margin-top: 14px; display: none; }
   .rolling .name { animation: shake .12s infinite; }
   @keyframes shake { 0%{transform:translateY(-2px)} 50%{transform:translateY(2px)} 100%{transform:translateY(-2px)} }
@@ -95,6 +98,9 @@
       <div class="row" style="margin-top:10px">
         <label><input type="checkbox" id="noRepeat" checked> 한 번 나온 곳은 다시 안 뽑기</label>
       </div>
+      <div class="row" style="margin-top:8px">
+        <label><input type="checkbox" id="typeFirst"> 🎰 종류부터 룰렛 (예: 「중식」 당첨 → 중식집 중에서 뽑기)</label>
+      </div>
     </div>
 
     <div class="card">
@@ -113,6 +119,7 @@
     <div class="status" id="status"></div>
 
     <div class="card result hidden" id="result">
+      <div class="typeWin hidden" id="rType"></div>
       <div class="cat" id="rCat"></div>
       <div class="name" id="rName"></div>
       <div class="meta">
@@ -290,11 +297,44 @@
     } finally { btn.disabled = false; }
   };
 
-  function roll(cands) {
+  // 가게 종류: "음식점 > 한식 > 해물,생선" → "한식"
+  function typeOf(p) { return p.category_name.split(' > ')[1] || p.category_name; }
+
+  // 1단계: 종류 룰렛
+  function rollType(cands) {
     return new Promise(function (resolve) {
-      var box = $('result'); box.classList.remove('hidden'); box.classList.add('rolling');
-      $('map').style.display = 'none';
-      var n = 0, total = 14;
+      var types = [];
+      cands.forEach(function (p) { var t = typeOf(p); if (types.indexOf(t) < 0) types.push(t); });
+      var badge = $('rType'); badge.classList.remove('hidden');
+      $('rName').textContent = '종류 고르는 중…';
+      $('rCat').textContent = ''; $('rDist').textContent = ''; $('rAddr').textContent = ''; $('rPhone').textContent = '';
+      var n = 0, total = 12;
+      (function tick() {
+        badge.textContent = '🎰 ' + types[Math.floor(Math.random() * types.length)];
+        n++;
+        if (n < total) { setTimeout(tick, 60 + n * 15); return; }
+        var t = types[Math.floor(Math.random() * types.length)];
+        badge.textContent = '🎰 ' + t + ' 당첨!';
+        setTimeout(function () { resolve(t); }, 600);
+      })();
+    });
+  }
+
+  async function roll(cands) {
+    var box = $('result'); box.classList.remove('hidden');
+    $('map').style.display = 'none';
+    $('rType').classList.add('hidden');
+    if ($('typeFirst').checked) {
+      var t = await rollType(cands);
+      cands = cands.filter(function (p) { return typeOf(p) === t; });
+    }
+    return rollPlace(cands);
+  }
+
+  function rollPlace(cands) {
+    return new Promise(function (resolve) {
+      var box = $('result'); box.classList.add('rolling');
+      var n = 0, total = cands.length > 1 ? 14 : 1;
       (function tick() {
         var p = cands[Math.floor(Math.random() * cands.length)];
         $('rName').textContent = p.place_name;
