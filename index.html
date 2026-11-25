@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>랜덤 한입</title>
+<style>
+  :root {
+    --bg: #fff8f1; --card: #ffffff; --ink: #2b2118; --sub: #7a6a5c;
+    --accent: #ff6b35; --accent-2: #ffb703; --line: #f0e2d4; --chip: #fff1e6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1b1612; --card: #26201a; --ink: #f6ede4; --sub: #b3a395;
+      --accent: #ff7d4d; --accent-2: #ffc23d; --line: #3a3027; --chip: #33291f; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+  main { max-width: 520px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 26px; margin: 8px 0 4px; }
+  .sub { color: var(--sub); font-size: 14px; margin: 0 0 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    padding: 16px; margin-bottom: 14px; }
+  .label { font-size: 13px; color: var(--sub); margin-bottom: 8px; font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { border: 1px solid var(--line); background: var(--chip); color: var(--ink);
+    padding: 8px 14px; border-radius: 999px; font-size: 15px; cursor: pointer; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  input[type=text] { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); font-size: 15px; }
+  .btn { width: 100%; border: 0; border-radius: 16px; padding: 18px; font-size: 20px; font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; cursor: pointer; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.small { padding: 10px; font-size: 15px; border-radius: 10px; margin-top: 10px; }
+  .status { text-align: center; color: var(--sub); font-size: 14px; margin: 10px 0; min-height: 20px; }
+  .result { text-align: center; padding: 22px 16px; }
+  .result .name { font-size: 28px; font-weight: 800; margin: 6px 0; word-break: keep-all; }
+  .result .cat { color: var(--sub); font-size: 14px; }
+  .result .meta { margin: 12px 0; font-size: 15px; line-height: 1.6; }
+  .result .dist { display: inline-block; background: var(--chip); padding: 4px 10px; border-radius: 999px;
+    font-weight: 700; color: var(--accent); }
+  .links { display: flex; gap: 8px; margin-top: 12px; }
+  .links a { flex: 1; text-align: center; text-decoration: none; padding: 12px; border-radius: 12px;
+    font-weight: 700; font-size: 15px; }
+  .naver { background: #03c75a; color: #fff; }
+  .kakao { background: #fee500; color: #191919; }
+  #map { width: 100%; height: 220px; border-radius: 14px; margin-top: 14px; display: none; }
+  .rolling .name { animation: shake .12s infinite; }
+  @keyframes shake { 0%{transform:translateY(-2px)} 50%{transform:translateY(2px)} 100%{transform:translateY(-2px)} }
+  .small-note { font-size: 12px; color: var(--sub); }
+  .hidden { display: none; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row label { font-size: 14px; display: flex; gap: 6px; align-items: center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🎲 랜덤 한입</h1>
+  <p class="sub">여행지 어디서든, 지금 내 근처 맛집·카페 하나를 뽑아 드려요</p>
+
+  <!-- 처음 한 번: 카카오 키 입력 -->
+  <section id="keyBox" class="card hidden">
+    <div class="label">카카오 JavaScript 키를 넣어 주세요 (처음 한 번만)</div>
+    <input id="keyInput" type="text" placeholder="예: 1a2b3c4d5e...">
+    <button class="btn small" id="keySave">저장</button>
+    <p class="small-note">카카오 개발자센터 → 내 애플리케이션 → 앱 키 → «JavaScript 키». 이 브라우저에만 저장됩니다.</p>
+  </section>
+
+  <section id="app" class="hidden">
+    <div class="card">
+      <div class="label">무엇을 찾을까요</div>
+      <div class="chips" id="typeChips">
+        <button class="chip on" data-v="FD6">🍚 맛집</button>
+        <button class="chip" data-v="CE7">☕ 카페</button>
+        <button class="chip" data-v="BOTH">둘 다</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">얼마나 멀리까지</div>
+      <div class="chips" id="radiusChips">
+        <button class="chip" data-v="300">300m</button>
+        <button class="chip on" data-v="500">500m</button>
+        <button class="chip" data-v="1000">1km</button>
+        <button class="chip" data-v="2000">2km</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">빼고 싶은 것 (쉼표로 구분, 비워도 돼요)</div>
+      <input id="exclude" type="text" placeholder="예: 패스트푸드, 프랜차이즈, 술집">
+      <div class="row" style="margin-top:10px">
+        <label><input type="checkbox" id="noRepeat" checked> 한 번 나온 곳은 다시 안 뽑기</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">어디 근처에서 찾을까요</div>
+      <div class="chips" id="whereChips">
+        <button class="chip on" data-v="gps">📍 지금 내 위치</button>
+        <button class="chip" data-v="place">🔎 장소 이름으로</button>
+      </div>
+      <div id="placeBox" class="hidden" style="margin-top:10px">
+        <input id="placeInput" type="text" placeholder="예: 강릉역, 해운대해수욕장, 전주 한옥마을">
+      </div>
+      <div class="small-note" id="whereNote" style="margin-top:8px"></div>
+    </div>
+
+    <button class="btn" id="pick">🎲 뽑기!</button>
+    <div class="status" id="status"></div>
+
+    <div class="card result hidden" id="result">
+      <div class="cat" id="rCat"></div>
+      <div class="name" id="rName"></div>
+      <div class="meta">
+        <span class="dist" id="rDist"></span><br>
+        <span id="rAddr"></span><br>
+        <span id="rPhone"></span>
+      </div>
+      <div class="links">
+        <a class="naver" id="rNaver" target="_blank" rel="noopener">네이버 지도</a>
+        <a class="kakao" id="rKakao" target="_blank" rel="noopener">카카오맵</a>
+      </div>
+      <div id="map"></div>
+    </div>
+
+    <p class="small-note" style="text-align:center">
+      후보 <span id="poolCount">0</span>곳 ·
+      <a href="#" id="resetKey" style="color:inherit">키 다시 넣기</a>
+    </p>
+  </section>
+</main>
+
+<script>
+(function () {
+  var KEY_NAME = 'kakaoJsKey';
+  var state = { type: 'FD6', radius: 500, pos: null, pool: [], poolKey: '', shown: {} };
+  var map = null, marker = null;
+
+  // 카카오 JavaScript 키는 원래 웹페이지에 공개되는 키입니다(등록된 도메인에서만 동작).
+  var DEFAULT_KEY = 'd49eb105993d348c73cab8d9357d16ce';
+  function getKey() { try { return localStorage.getItem(KEY_NAME) || DEFAULT_KEY; } catch (e) { return DEFAULT_KEY; } }
+  function setKey(k) { try { localStorage.setItem(KEY_NAME, k); } catch (e) {} }
+  function $(id) { return document.getElementById(id); }
+  function status(t) { $('status').textContent = t || ''; }
+
+  // 1) 키 확인 → SDK 불러오기
+  var key = getKey();
+  if (!key) { $('keyBox').classList.remove('hidden'); }
+  else { loadSdk(key); }
+
+  $('keySave').onclick = function () {
+    var k = $('keyInput').value.trim();
+    if (!k) return;
+    setKey(k); location.reload();
+  };
+  $('resetKey').onclick = function (e) {
+    e.preventDefault(); try { localStorage.removeItem(KEY_NAME); } catch (x) {} location.reload();
+  };
+
+  function loadSdk(k) {
+    var s = document.createElement('script');
+    s.src = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=' + encodeURIComponent(k) + '&libraries=services&autoload=false';
+    s.onload = function () { kakao.maps.load(function () { $('app').classList.remove('hidden'); }); };
+    s.onerror = function () {
+      $('keyBox').classList.remove('hidden');
+      status('카카오 지도를 못 불러왔어요. 키가 맞는지, 카카오 개발자센터에 이 주소(도메인)를 등록했는지 확인해 주세요.');
+      $('app').classList.remove('hidden');
+    };
+    document.head.appendChild(s);
+  }
+
+  // 2) 선택 칩
+  function bindChips(id, fn) {
+    var box = $(id);
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest('.chip'); if (!b) return;
+      Array.prototype.forEach.call(box.children, function (c) { c.classList.remove('on'); });
+      b.classList.add('on'); fn(b.dataset.v);
+    });
+  }
+  bindChips('typeChips', function (v) { state.type = v; });
+  bindChips('radiusChips', function (v) { state.radius = +v; });
+  state.where = 'gps';
+  bindChips('whereChips', function (v) {
+    state.where = v; state.pos = null; state.pool = [];
+    $('placeBox').classList.toggle('hidden', v !== 'place');
+    $('whereNote').textContent = '';
+    if (v === 'place') $('placeInput').focus();
+  });
+  $('placeInput').addEventListener('input', function () { state.pos = null; state.pool = []; });
+  $('placeInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('pick').click(); });
+
+  // 장소 이름 → 좌표
+  function findPlace(q) {
+    return new Promise(function (resolve, reject) {
+      if (!q) return reject('장소 이름을 넣어 주세요. (예: 강릉역)');
+      new kakao.maps.services.Places().keywordSearch(q, function (data, st) {
+        if (st === kakao.maps.services.Status.OK && data.length) {
+          var p = data[0];
+          $('whereNote').textContent = '📍 기준: ' + p.place_name + ' (' + (p.road_address_name || p.address_name) + ')';
+          resolve({ lat: +p.y, lng: +p.x });
+        } else reject('「' + q + '」을(를) 못 찾았어요. 다른 이름으로 넣어 보세요.');
+      });
+    });
+  }
+
+  // 3) 내 위치
+  function getPos() {
+    return new Promise(function (resolve, reject) {
+      if (!navigator.geolocation) return reject('이 브라우저는 위치를 지원하지 않아요.');
+      navigator.geolocation.getCurrentPosition(
+        function (p) { resolve({ lat: p.coords.latitude, lng: p.coords.longitude }); },
+        function (e) {
+          if (e.code === 1) reject('위치 권한이 막혀 있어요. 주소창 왼쪽 아이콘 → 위치 → 허용 후 새로고침해 주세요. 또는 「🔎 장소 이름으로」를 쓰세요.');
+          else reject('위치를 못 잡았어요(PC는 GPS가 없어 자주 그래요). 「🔎 장소 이름으로」를 눌러 근처 역·장소 이름을 넣어 보세요.');
+        },
+        { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
+      );
+    });
+  }
+
+  // 4) 카테고리 검색 (한 쪽 15곳 × 최대 3쪽 = 45곳)
+  function searchCategory(code, pos, radius) {
+    return new Promise(function (resolve) {
+      var ps = new kakao.maps.services.Places();
+      var out = [];
+      ps.categorySearch(code, function cb(data, st, pg) {
+        if (st === kakao.maps.services.Status.OK) {
+          out = out.concat(data);
+          if (pg.hasNextPage) { pg.nextPage(); return; }
+        }
+        resolve(out);
+      }, {
+        location: new kakao.maps.LatLng(pos.lat, pos.lng),
+        radius: radius,
+        sort: kakao.maps.services.SortBy.DISTANCE
+      });
+    });
+  }
+
+  async function buildPool() {
+    var codes = state.type === 'BOTH' ? ['FD6', 'CE7'] : [state.type];
+    var lists = await Promise.all(codes.map(function (c) { return searchCategory(c, state.pos, state.radius); }));
+    var seen = {}, all = [];
+    lists.flat().forEach(function (p) { if (!seen[p.id]) { seen[p.id] = 1; all.push(p); } });
+    return all;
+  }
+
+  function applyExclude(list) {
+    var words = $('exclude').value.split(',').map(function (w) { return w.trim(); }).filter(Boolean);
+    return list.filter(function (p) {
+      var text = p.place_name + ' ' + p.category_name;
+      return !words.some(function (w) { return text.indexOf(w) >= 0; });
+    });
+  }
+
+  // 5) 뽑기
+  $('pick').onclick = async function () {
+    var btn = this; btn.disabled = true;
+    try {
+      if (!state.pos) {
+        if (state.where === 'place') { status('🔎 장소 찾는 중…'); state.pos = await findPlace($('placeInput').value.trim()); }
+        else { status('📍 내 위치 확인 중… (위에 「허용」 창이 뜨면 눌러 주세요)'); state.pos = await getPos(); }
+      }
+      var pk = state.type + '|' + state.radius;
+      if (state.poolKey !== pk || !state.pool.length) {
+        status('🔎 주변 가게 찾는 중…');
+        state.pool = await buildPool(); state.poolKey = pk; state.shown = {};
+      }
+      var cands = applyExclude(state.pool);
+      if ($('noRepeat').checked) {
+        var fresh = cands.filter(function (p) { return !state.shown[p.id]; });
+        if (!fresh.length && cands.length) { state.shown = {}; fresh = cands; status('다 한 번씩 나왔어요. 처음부터 다시 뽑아요!'); }
+        cands = fresh;
+      }
+      $('poolCount').textContent = state.pool.length;
+      if (!cands.length) { status('조건에 맞는 곳이 없어요. 거리를 늘리거나 빼는 낱말을 줄여 보세요.'); return; }
+      status('');
+      await roll(cands);
+    } catch (err) {
+      status(typeof err === 'string' ? err : '문제가 생겼어요: ' + (err && err.message));
+    } finally { btn.disabled = false; }
+  };
+
+  function roll(cands) {
+    return new Promise(function (resolve) {
+      var box = $('result'); box.classList.remove('hidden'); box.classList.add('rolling');
+      $('map').style.display = 'none';
+      var n = 0, total = 14;
+      (function tick() {
+        var p = cands[Math.floor(Math.random() * cands.length)];
+        $('rName').textContent = p.place_name;
+        $('rCat').textContent = ''; $('rDist').textContent = ''; $('rAddr').textContent = ''; $('rPhone').textContent = '';
+        n++;
+        if (n < total) { setTimeout(tick, 50 + n * 12); return; }
+        var pick = cands[Math.floor(Math.random() * cands.length)];
+        box.classList.remove('rolling'); show(pick); resolve();
+      })();
+    });
+  }
+
+  function show(p) {
+    state.shown[p.id] = 1;
+    var cat = p.category_name.split(' > ').slice(1).join(' · ') || p.category_name;
+    $('rName').textContent = p.place_name;
+    $('rCat').textContent = cat;
+    var d = +p.distance;
+    $('rDist').textContent = d >= 1000 ? (d / 1000).toFixed(1) + 'km' : d + 'm' + ' · 걸어서 약 ' + Math.max(1, Math.round(d / 67)) + '분';
+    $('rAddr').textContent = p.road_address_name || p.address_name;
+    $('rPhone').textContent = p.phone || '';
+    $('rNaver').href = 'https://map.naver.com/p/search/' + encodeURIComponent(p.place_name + ' ' + (p.address_name || ''));
+    $('rKakao').href = p.place_url;
+
+    var el = $('map'); el.style.display = 'block';
+    var ll = new kakao.maps.LatLng(+p.y, +p.x);
+    if (!map) { map = new kakao.maps.Map(el, { center: ll, level: 3 }); }
+    else { map.relayout(); map.setCenter(ll); }
+    if (marker) marker.setMap(null);
+    marker = new kakao.maps.Marker({ position: ll, map: map });
+  }
+})();
+</script>
+</body>
+</html>
