@@ -253,9 +253,27 @@
     });
   }
 
+  // 종류별로 한 번씩 더 찾기 (한 쪽 15곳) — 가까운 45곳이 다 해물집이어도 조금 떨어진 다른 종류를 잡는다
+  var FOOD_KEYWORDS = ['중식', '일식', '양식', '분식', '치킨', '피자', '햄버거', '고기', '국밥', '면요리', '아시아음식', '술집'];
+  function searchKeyword(word, pos, radius) {
+    return new Promise(function (resolve) {
+      new kakao.maps.services.Places().keywordSearch(word, function (data, st) {
+        resolve(st === kakao.maps.services.Status.OK ? data : []);
+      }, {
+        location: new kakao.maps.LatLng(pos.lat, pos.lng),
+        radius: radius, category_group_code: 'FD6',
+        sort: kakao.maps.services.SortBy.DISTANCE
+      });
+    });
+  }
+
   async function buildPool() {
     var codes = state.type === 'BOTH' ? ['FD6', 'CE7'] : [state.type];
-    var lists = await Promise.all(codes.map(function (c) { return searchCategory(c, state.pos, state.radius); }));
+    var jobs = codes.map(function (c) { return searchCategory(c, state.pos, state.radius); });
+    if (codes.indexOf('FD6') >= 0) {
+      FOOD_KEYWORDS.forEach(function (w) { jobs.push(searchKeyword(w, state.pos, state.radius)); });
+    }
+    var lists = await Promise.all(jobs);
     var seen = {}, all = [];
     lists.flat().forEach(function (p) { if (!seen[p.id]) { seen[p.id] = 1; all.push(p); } });
     return all;
@@ -298,7 +316,12 @@
   };
 
   // 가게 종류: "음식점 > 한식 > 해물,생선" → "한식"
-  function typeOf(p) { return p.category_name.split(' > ')[1] || p.category_name; }
+  // 한식은 너무 넓어서(횟집·국밥집·고깃집이 다 「한식」) 한 단계 더 나눈다: "한식 > 해물,생선" → "해물·생선"
+  function typeOf(p) {
+    var parts = p.category_name.split(' > ');
+    if (parts[1] === '한식' && parts[2]) return parts[2].replace(/,/g, '·');
+    return parts[1] || p.category_name;
+  }
 
   // 1단계: 종류 룰렛
   function rollType(cands) {
@@ -315,6 +338,7 @@
         if (n < total) { setTimeout(tick, 60 + n * 15); return; }
         var t = types[Math.floor(Math.random() * types.length)];
         badge.textContent = '🎰 ' + t + ' 당첨!';
+        if (types.length < 3) status('이 근처엔 종류가 ' + types.length + '가지뿐이에요 (' + types.join(', ') + '). 「얼마나 멀리까지」를 늘리면 더 다양해져요.');
         setTimeout(function () { resolve(t); }, 600);
       })();
     });
